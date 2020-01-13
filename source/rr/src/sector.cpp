@@ -3494,9 +3494,12 @@ default_case:
                         SA(spriteNum)          = (sprite[dmgSrc].ang + 1024) & 2047;
                     sprite[spriteNum].xvel  = -(sprite[dmgSrc].extra << 2);
                     int16_t sectNum = SECT(spriteNum);
-                    pushmove((vec3_t *)&sprite[spriteNum], &sectNum, 128L, (4L << 8), (4L << 8), CLIPMASK0);
-                    if (sectNum != SECT(spriteNum) && (unsigned)sectNum < MAXSECTORS)
-                        changespritesect(spriteNum, sectNum);
+                    if ((unsigned)sectNum < MAXSECTORS)
+                    {
+                        pushmove((vec3_t *)&sprite[spriteNum], &sectNum, 128L, (4L << 8), (4L << 8), CLIPMASK0);
+                        if (sectNum != SECT(spriteNum) && (unsigned)sectNum < MAXSECTORS)
+                            changespritesect(spriteNum, sectNum);
+                    }
                 }
 
                 if (sprite[spriteNum].statnum == STAT_ZOMBIEACTOR)
@@ -5247,7 +5250,7 @@ void G_Thunder(void)
             {
                 if (krand2() > 65000)
                 {
-                    g_winderTime = 256;
+                    g_winderTime = 128;
                     g_winderFlash = 1;
                     S_PlaySound(351+(rand()%3));
                 }

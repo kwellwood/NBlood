@@ -157,6 +157,7 @@ ifeq ($(RENDERTYPE),WIN)
     glad_objs += glad_wgl.c
 endif
 
+
 #### Voidwrap
 
 voidwrap := voidwrap
@@ -188,7 +189,6 @@ else
 endif
 
 voidwrap_cflags := -I$(voidwrap_root)/sdk/public/steam -fPIC -fvisibility=hidden -Wno-invalid-offsetof
-
 
 
 #### libsmackerdec
@@ -386,7 +386,6 @@ audiolib := audiolib
 
 audiolib_objs := \
     driver_adlib.cpp \
-    driver_nosound.cpp \
     drivers.cpp \
     flac.cpp \
     formats.cpp \
@@ -504,7 +503,7 @@ kenbuild_editor_rsrc_objs :=
 kenbuild_game_gen_objs :=
 kenbuild_editor_rsrc_objs :=
 
-ifeq (1,$(HAVE_GTK2))
+ifeq (11,$(HAVE_GTK2)$(STARTUP_WINDOW))
     kenbuild_game_objs += startgtk.game.cpp
     kenbuild_game_gen_objs += game_banner.c
     kenbuild_editor_gen_objs += build_banner.c
@@ -878,6 +877,7 @@ ifeq ($(RENDERTYPE),SDL)
     blood_game_rsrc_objs += game_icon.c
 endif
 
+
 #### Redneck Rampage
 
 rr := rr
@@ -1001,6 +1001,7 @@ ifeq ($(RENDERTYPE),SDL)
     rr_editor_rsrc_objs += build_icon.c
 endif
 
+
 #### Shadow Warrior
 
 sw := sw
@@ -1108,7 +1109,7 @@ sw_editor_rsrc_objs :=
 sw_game_gen_objs :=
 sw_editor_gen_objs :=
 
-ifeq (1,$(HAVE_GTK2))
+ifeq (11,$(HAVE_GTK2)$(STARTUP_WINDOW))
     sw_game_objs += startgtk.game.cpp
     sw_game_gen_objs += game_banner.c
     sw_editor_gen_objs += build_banner.c
@@ -1121,6 +1122,111 @@ ifeq ($(PLATFORM),WINDOWS)
     sw_game_objs += startwin.game.cpp
     sw_game_rsrc_objs += gameres.rc
     sw_editor_rsrc_objs += buildres.rc
+endif
+
+
+#### Exhumed
+
+exhumed := exhumed
+
+exhumed_root := $(source)/$(exhumed)
+exhumed_src := $(exhumed_root)/src
+exhumed_rsrc := $(exhumed_root)/rsrc
+exhumed_obj := $(obj)/$(exhumed)
+
+exhumed_cflags := -I$(exhumed_src)
+
+exhumed_game_deps := duke3d_common_midi audiolib mact
+exhumed_editor_deps := audiolib
+
+exhumed_game := pcexhumed
+exhumed_editor := pcexhumed_editor
+
+exhumed_game_proper := Exhumed
+exhumed_editor_proper := Exhumed_editor
+
+exhumed_game_objs := \
+    aistuff.cpp \
+    anims.cpp \
+    anubis.cpp \
+    bubbles.cpp \
+    bullet.cpp \
+    cd.cpp \
+    cdaudio.cpp \
+    cdrom.cpp \
+    config.cpp \
+    enginesubs.cpp \
+    exhumed.cpp \
+    exscript.cpp \
+    fish.cpp \
+    grenade.cpp \
+    grpscan.cpp \
+    gun.cpp \
+    init.cpp \
+    input.cpp \
+    items.cpp \
+    lavadude.cpp \
+    light.cpp \
+    lighting.cpp \
+    lion.cpp \
+    main.cpp \
+    map.cpp \
+    menu.cpp \
+    mono.cpp \
+    move.cpp \
+    movie.cpp \
+    mummy.cpp \
+    network.cpp \
+    object.cpp \
+    osdcmds.cpp \
+    paul.cpp \
+    player.cpp \
+    queen.cpp \
+    ra.cpp \
+    random.cpp \
+    rat.cpp \
+    record.cpp \
+    rex.cpp \
+    roach.cpp \
+    runlist.cpp \
+    save.cpp \
+    scorp.cpp \
+    sequence.cpp \
+    serial.cpp \
+    set.cpp \
+    snake.cpp \
+    sound.cpp \
+    spider.cpp \
+    status.cpp \
+    stream.cpp \
+    switch.cpp \
+    text2.cpp \
+    timer.cpp \
+    trigdat.cpp \
+    version.cpp \
+    view.cpp \
+    wasp.cpp \
+
+exhumed_editor_objs :=
+
+exhumed_game_rsrc_objs :=
+exhumed_editor_rsrc_objs :=
+exhumed_game_gen_objs :=
+exhumed_editor_gen_objs :=
+
+ifeq (1,$(HAVE_GTK2))
+    exhumed_game_objs += startgtk.game.cpp
+    exhumed_game_gen_objs += game_banner.c
+    exhumed_editor_gen_objs += build_banner.c
+endif
+ifeq ($(RENDERTYPE),SDL)
+    exhumed_game_rsrc_objs += game_icon.c
+    exhumed_editor_rsrc_objs += game_icon.c
+endif
+ifeq ($(PLATFORM),WINDOWS)
+    exhumed_game_objs += startwin.game.cpp
+    exhumed_game_rsrc_objs += gameres.rc
+    exhumed_editor_rsrc_objs += buildres.rc
 endif
 
 
@@ -1148,6 +1254,7 @@ games := \
     blood \
     rr \
     sw \
+    exhumed \
 
 libraries := \
     audiolib \
@@ -1194,7 +1301,10 @@ endif
 
 #### Targets
 
-all: blood
+all: \
+    blood \
+    rr \
+    exhumed \
 
 start:
 	$(BUILD_STARTED)
@@ -1337,7 +1447,7 @@ $$($1_obj)/%.$$o: $$($1_src)/%.glsl | $$($1_obj)
 
 $$($1_obj)/%.$$o: $$($1_rsrc)/%.rc | $$($1_obj)
 	$$(COMPILE_STATUS)
-	$$(RECIPE_IF) $$(RC) -i $$< -o $$@ --include-dir=$$(engine_inc) --include-dir=$$($1_src) --include-dir=$$($1_rsrc) -DPOLYMER=$$(POLYMER) $$(RECIPE_RESULT_COMPILE)
+	$$(RECIPE_IF) $$(RC) -i $$< -o $$@ --include-dir=$$(engine_inc) --include-dir=$$($1_src) --include-dir=$$($1_rsrc) -DPOLYMER=$$(POLYMER) $(REVFLAG) $$(RECIPE_RESULT_COMPILE)
 
 $$($1_obj)/%.$$o: $$($1_rsrc)/%.c | $$($1_obj)
 	$$(COMPILE_STATUS)

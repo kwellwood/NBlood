@@ -148,6 +148,7 @@ int32_t r_flatsky = 1;
 // used for fogcalc
 static float fogresult, fogresult2;
 coltypef fogcol, fogtable[MAXPALOOKUPS];
+float fogfactor[MAXPALOOKUPS];
 
 static uint32_t currentShaderProgramID = 0;
 static GLenum currentActiveTexture = 0;
@@ -526,6 +527,7 @@ void polymost_glreset()
         fogtable[i].g = palookupfog[i].g * (1.f/255.f);
         fogtable[i].b = palookupfog[i].b * (1.f/255.f);
         fogtable[i].a = 0;
+        fogfactor[i] = palookupfogfactor[i];
     }
 
     //Reset if this is -1 (meaning 1st texture call ever), or > 0 (textures in memory)
@@ -1246,13 +1248,21 @@ static inline void fogcalc(int32_t shade, int32_t vis, int32_t pal)
 
     if (r_usenewshading < 2)
     {
-        fogcalc_old(shade, vis);
+        if (fogfactor[pal] == 0.f)
+            fogresult = 0.001f;
+        else
+            fogcalc_old(shade, vis);
         return;
     }
 
     float combvis = (float) globalvisibility * (uint8_t) (vis+16);
 
-    if (combvis == 0.f)
+    if (fogfactor[pal] == 0.f)
+    {
+        fogresult = FULLVIS_BEGIN;
+        fogresult2 = FULLVIS_END;
+    }
+    else if (combvis == 0.f)
     {
         if (r_usenewshading == 2 && shade > 0)
         {
@@ -1312,10 +1322,12 @@ void calc_and_apply_fog(int32_t shade, int32_t vis, int32_t pal)
         fogresult = 0.f;
         fogcol = fogtable[pal];
 
-        if (((uint8_t)(vis + 16)) > 0 && globalvisibility > 0)
+        if (((uint8_t)(vis + 16)) > 0 && globalvisibility > 0 && fogfactor[pal] > 0.f)
         {
             constexpr GLfloat glfogconstant = 262144.f;
             GLfloat fogrange = (frealmaxshade * glfogconstant) / (((uint8_t)(vis + 16)) * globalvisibility);
+
+            fogrange *= fogfactor[pal];
 
             fogresult = 0.f - (((min(shade, 0) - 0.5f) / frealmaxshade) * fogrange); // min() = subtract shades from fog
             fogresult2 = fogrange - (((shade - 0.5f) / frealmaxshade) * fogrange);
@@ -1358,6 +1370,8 @@ void calc_and_apply_fog_factor(int32_t shade, int32_t vis, int32_t pal, float fa
             GLfloat normalizedshade = (shade - 0.5f) / frealmaxshade;
             GLfloat fogrange = (((uint8_t)(vis + 16)) / (8.f * frealmaxshade)) + normalizedshade;
 
+            fogrange *= fogfactor[pal];
+
             // subtract shades from fog
             if (normalizedshade > 0.f && normalizedshade < 1.f)
                 fogrange = (fogrange - normalizedshade) / (1.f - normalizedshade);
@@ -1381,6 +1395,9 @@ void calc_and_apply_fog_factor(int32_t shade, int32_t vis, int32_t pal, float fa
     // NOTE: for r_usenewshading >= 2, the fog beginning/ending distance results are
     // unused.
     fogcalc(shade, vis, pal);
+    fogresult *= fogfactor[pal];
+    fogresult2 *= fogfactor[pal];
+
     glFogfv(GL_FOG_COLOR, (GLfloat *)&fogcol);
 
     if (r_usenewshading < 2)
@@ -2124,7 +2141,7 @@ static void gloadtile_art_indexed(int32_t dapic, int32_t dameth, pthtyp *pth, in
 
 void gloadtile_art(int32_t dapic, int32_t dapal, int32_t tintpalnum, int32_t dashade, int32_t dameth, pthtyp *pth, int32_t doalloc)
 {
-    if (dameth & PTH_INDEXED)
+    if (dameth & DAMETH_INDEXED)
     {
         return gloadtile_art_indexed(dapic, dameth, pth, doalloc);
     }
@@ -2782,9 +2799,9 @@ int32_t polymost_maskWallHasTranslucency(uwalltype const * const wall)
     return pth && (pth->flags & PTH_HASALPHA) && !(pth->flags & PTH_ONEBITALPHA);
 }
 
-int32_t polymost_spriteHasTranslucency(uspritetype const * const tspr)
+int32_t polymost_spriteHasTranslucency(tspritetype const * const tspr)
 {
-    if ((tspr->cstat & (CSTAT_SPRITE_TRANSLUCENT | CSTAT_SPRITE_RESERVED1)) ||
+    if ((tspr->cstat & CSTAT_SPRITE_TRANSLUCENT) || (tspr->clipdist & TSPR_FLAGS_DRAW_LAST) || 
         ((unsigned)tspr->owner < MAXSPRITES && spriteext[tspr->owner].alpha))
         return true;
 
@@ -2856,7 +2873,7 @@ static void polymost2_drawVBO(GLenum mode,
         tileLoad(globalpicnum);
     }
 
-    pthtyp *pth = our_texcache_fetch(dameth | (r_useindexedcolortextures ? PTH_INDEXED : 0));
+    pthtyp *pth = our_texcache_fetch(dameth | (r_useindexedcolortextures ? DAMETH_INDEXED : 0));
 
     if (!pth)
     {
@@ -2898,9 +2915,9 @@ static void polymost2_drawVBO(GLenum mode,
     float tint[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     polytint_t const & polytint = hictinting[globalpal];
     //POGOTODO: full bright pass uses its own globalshade...
-    tint[0] = (1.f-(polytint.sr*(1.f/255.f)))*getshadefactor(globalshade)+(polytint.sr*(1.f/255.f));
-    tint[1] = (1.f-(polytint.sg*(1.f/255.f)))*getshadefactor(globalshade)+(polytint.sg*(1.f/255.f));
-    tint[2] = (1.f-(polytint.sb*(1.f/255.f)))*getshadefactor(globalshade)+(polytint.sb*(1.f/255.f));
+    tint[0] = (1.f-(polytint.sr*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sr*(1.f/255.f));
+    tint[1] = (1.f-(polytint.sg*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sg*(1.f/255.f));
+    tint[2] = (1.f-(polytint.sb*(1.f/255.f)))*getshadefactor(globalshade, globalpal)+(polytint.sb*(1.f/255.f));
 
     // spriteext full alpha control
     float alpha = float_trans(dameth & DAMETH_MASKPROPS, drawpoly_blend) * (1.f - drawpoly_alpha);
@@ -3216,7 +3233,7 @@ static void polymost_drawpoly(vec2f_t const * const dpxy, int32_t const n, int32
 
     polymost_outputGLDebugMessage(3, "polymost_drawpoly(dpxy:%p, n:%d, method_:%X), method: %X", dpxy, n, method_, method);
 
-    pthtyp *pth = our_texcache_fetch(method | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? PTH_INDEXED : 0));
+    pthtyp *pth = our_texcache_fetch(method | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? DAMETH_INDEXED : 0));
 
     if (!pth)
     {
@@ -3379,7 +3396,7 @@ static void polymost_drawpoly(vec2f_t const * const dpxy, int32_t const n, int32
 #endif
     {
         polytint_t const & tint = hictinting[globalpal];
-        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() ? 1.f : getshadefactor(globalshade);
+        float shadeFactor = (pth->flags & PTH_INDEXED) && polymost_usetileshades() ? 1.f : getshadefactor(globalshade, globalpal);
         pc[0] = (1.f-(tint.sr*(1.f/255.f)))*shadeFactor+(tint.sr*(1.f/255.f));
         pc[1] = (1.f-(tint.sg*(1.f/255.f)))*shadeFactor+(tint.sg*(1.f/255.f));
         pc[2] = (1.f-(tint.sb*(1.f/255.f)))*shadeFactor+(tint.sb*(1.f/255.f));
@@ -5448,7 +5465,7 @@ static void polymost_drawalls(int32_t const bunch)
             xtex.d = (ryp0-ryp1)*gxyaspect / (x0-x1);
             ytex.d = 0;
             otex.d = ryp0*gxyaspect - xtex.d*x0;
-        
+
             xtex.u = ytex.u = otex.u = 0;
             xtex.v = ytex.v = otex.v = 0;
             polymost_domost(x0, fy0, x1, fy1);
@@ -5852,7 +5869,7 @@ static void polymost_drawalls(int32_t const bunch)
             xtex.d = (ryp0-ryp1)*gxyaspect / (x0-x1);
             ytex.d = 0;
             otex.d = ryp0*gxyaspect - xtex.d*x0;
-        
+
             xtex.u = ytex.u = otex.u = 0;
             xtex.v = ytex.v = otex.v = 0;
             polymost_domost(x1, cy1, x0, cy0);
@@ -7348,7 +7365,7 @@ void Polymost_prepare_loadboard(void)
     Bmemset(wsprinfo, 0, sizeof(wsprinfo));
 }
 
-static inline int32_t polymost_findwall(uspriteptr_t const tspr, vec2_t const * const tsiz, int32_t * rd)
+static inline int32_t polymost_findwall(tspritetype const * const tspr, vec2_t const * const tsiz, int32_t * rd)
 {
     int32_t dist = 4, closest = -1;
     auto const sect = (usectortype  * )&sector[tspr->sectnum];
@@ -8599,8 +8616,7 @@ void polymost_dorotatespritemodel(int32_t sx, int32_t sy, int32_t z, int16_t a, 
 
     vec3f_t vec1;
 
-    uspritetype tspr;
-    Bmemset(&tspr, 0, sizeof(spritetype));
+    tspritetype tspr{};
 
     hudtyp const * const hud = tile2model[tilenum].hudmem[(dastat&4)>>2];
 
@@ -8786,7 +8802,7 @@ void polymost_dorotatespritemodel(int32_t sx, int32_t sy, int32_t z, int16_t a, 
         glEnable(GL_BLEND);
 
         spriteext[tspr.owner].roll = a;
-        spriteext[tspr.owner].offset.z = z;
+        spriteext[tspr.owner].pivot_offset.z = z;
 
         fov = hud->fov;
 
@@ -8802,7 +8818,7 @@ void polymost_dorotatespritemodel(int32_t sx, int32_t sy, int32_t z, int16_t a, 
 
         polymer_setaspect(pr_fov);
 
-        spriteext[tspr.owner].offset.z = 0;
+        spriteext[tspr.owner].pivot_offset.z = 0;
         spriteext[tspr.owner].roll = 0;
 
         glDisable(GL_BLEND);
@@ -9293,7 +9309,7 @@ void polymost_fillpolygon(int32_t npoints)
 
     if (gloy1 != -1) polymostSet2dView(); //disables blending, texturing, and depth testing
     glEnable(GL_ALPHA_TEST);
-    pthtyp const * const pth = our_texcache_fetch(DAMETH_NOMASK | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? PTH_INDEXED : 0));
+    pthtyp const * const pth = our_texcache_fetch(DAMETH_NOMASK | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? DAMETH_INDEXED : 0));
 
     if (pth)
     {
@@ -9305,7 +9321,7 @@ void polymost_fillpolygon(int32_t npoints)
 
     polymost_updatePalette();
 
-    float const f = getshadefactor(globalshade);
+    float const f = getshadefactor(globalshade, globalpal);
 
     uint8_t const maskprops = (globalorientation>>7)&DAMETH_MASKPROPS;
     handle_blend(maskprops > DAMETH_MASK, 0, maskprops == DAMETH_TRANS2);
@@ -9372,7 +9388,7 @@ int32_t polymost_drawtilescreen(int32_t tilex, int32_t tiley, int32_t wallnum, i
 
     int32_t const ousehightile = usehightile;
     usehightile = usehitile && usehightile;
-    pth = texcache_fetch(wallnum, 0, 0, DAMETH_CLAMPED | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? PTH_INDEXED : 0));
+    pth = texcache_fetch(wallnum, 0, 0, DAMETH_CLAMPED | (videoGetRenderMode() == REND_POLYMOST && r_useindexedcolortextures ? DAMETH_INDEXED : 0));
     if (usehightile)
         loadedhitile[wallnum>>3] |= pow2char[wallnum&7];
     usehightile = ousehightile;

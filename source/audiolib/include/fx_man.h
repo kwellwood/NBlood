@@ -59,6 +59,7 @@ enum FX_LOOP_HOW
 
 const char *FX_ErrorString(int ErrorNumber);
 int FX_Init(int numvoices, int numchannels, int mixrate, void *initdata);
+void FX_InitCvars(void);
 int FX_Shutdown(void);
 int FX_GetDevice(void);
 
@@ -72,6 +73,9 @@ int FX_PlayRaw(char *ptr, uint32_t ptrlength, int rate, int pitchoffset, int vol
     int left, int right, int priority, fix16_t volume, intptr_t callbackval);
 int FX_PlayLoopedRaw(char *ptr, uint32_t ptrlength, char *loopstart, char *loopend, int rate,
     int pitchoffset, int vol, int left, int right, int priority, fix16_t volume, intptr_t callbackval);
+
+int FX_StartDemandFeedPlayback(void (*function)(const char** ptr, uint32_t* length), int rate, int pitchoffset,
+                    int vol, int left, int right, int priority, fix16_t volume, intptr_t callbackval);
 
 
 int FX_SetPrintf(void(*function)(const char *, ...));
@@ -93,8 +97,10 @@ static FORCE_INLINE int FX_CheckMVErr(int status)
 static FORCE_INLINE void FX_SetCallBack(void(*function)(intptr_t)) { MV_SetCallBack(function); }
 static FORCE_INLINE void FX_SetVolume(int volume) { MV_SetVolume(volume); }
 static FORCE_INLINE int FX_GetVolume(void) { return MV_GetVolume(); }
+#ifdef ASS_REVERSESTEREO
 static FORCE_INLINE void FX_SetReverseStereo(int setting) { MV_SetReverseStereo(setting); }
 static FORCE_INLINE int FX_GetReverseStereo(void) { return MV_GetReverseStereo(); }
+#endif
 static FORCE_INLINE void FX_SetReverb(int reverb) { MV_SetReverb(reverb); }
 static FORCE_INLINE int FX_GetMaxReverbDelay(void) { return MV_GetMaxReverbDelay(); }
 static FORCE_INLINE int FX_GetReverbDelay(void) { return MV_GetReverbDelay(); }
@@ -110,6 +116,7 @@ static FORCE_INLINE int FX_SetPan(int handle, int vol, int left, int right)
 }
 static FORCE_INLINE int FX_SetPitch(int handle, int pitchoffset) { return FX_CheckMVErr(MV_SetPitch(handle, pitchoffset)); }
 static FORCE_INLINE int FX_SetFrequency(int handle, int frequency) { return FX_CheckMVErr(MV_SetFrequency(handle, frequency)); }
+static FORCE_INLINE int32_t FX_GetFrequency(int handle, int *frequency) { return FX_CheckMVErr(MV_GetFrequency(handle, frequency)); }
 static FORCE_INLINE int FX_Pan3D(int handle, int angle, int distance)
 {
     return FX_CheckMVErr(MV_Pan3D(handle, angle, distance));

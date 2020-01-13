@@ -70,8 +70,24 @@ extern void (*MV_Printf)(const char *fmt, ...);
 
 const char *MV_ErrorString(int ErrorNumber);
 
-void MV_Lock();
-void MV_Unlock();
+extern int MV_Locked;
+static inline void MV_Lock(void)
+{
+    extern void SoundDriver_PCM_Lock(void);
+
+    if (!MV_Locked++)
+        SoundDriver_PCM_Lock();
+}
+static inline void MV_Unlock(void)
+{
+    extern void SoundDriver_PCM_Unlock(void);
+
+    if (!--MV_Locked)
+        SoundDriver_PCM_Unlock();
+    else if (MV_Locked < 0)
+        MV_Printf("MV_Unlock(): lockdepth < 0!\n");
+}
+
 int  MV_VoicePlaying(int handle);
 int  MV_KillAllVoices(void);
 int  MV_Kill(int handle);
@@ -79,6 +95,7 @@ int  MV_VoicesPlaying(void);
 int  MV_VoiceAvailable(int priority);
 int  MV_SetPitch(int handle, int pitchoffset);
 int  MV_SetFrequency(int handle, int frequency);
+int  MV_GetFrequency(int handle, int *frequency);
 int  MV_PauseVoice(int handle, int pause);
 int  MV_EndLooping(int handle);
 int  MV_SetPan(int handle, int vol, int left, int right);
@@ -92,6 +109,9 @@ int MV_PlayVOC3D(char *ptr, uint32_t length, int loophow, int pitchoffset, int a
                  int priority, fix16_t volume, intptr_t callbackval);
 int MV_PlayVOC(char *ptr, uint32_t length, int loopstart, int loopend, int pitchoffset, int vol,
                int left, int right, int priority, fix16_t volume, intptr_t callbackval);
+
+int MV_StartDemandFeedPlayback(void (*function)(const char** ptr, uint32_t* length), int rate,
+                int pitchoffset, int vol, int left, int right, int priority, fix16_t volume, intptr_t callbackval);
 
 decltype(MV_PlayVOC3D) MV_PlayWAV3D;
 decltype(MV_PlayVOC)   MV_PlayWAV;
@@ -113,12 +133,18 @@ int  MV_SetPosition(int handle, int position);
 void MV_SetVolume(int volume);
 int  MV_GetVolume(void);
 void MV_SetCallBack(void (*function)(intptr_t));
+
+#ifdef __MSDOS__
+#define ASS_REVERSESTEREO
 void MV_SetReverseStereo(int setting);
 int  MV_GetReverseStereo(void);
+#endif
+
 int  MV_Init(int soundcard, int MixRate, int Voices, int numchannels, void *initdata);
 int  MV_Shutdown(void);
 void MV_HookMusicRoutine(void (*callback)(void));
 void MV_UnhookMusicRoutine(void);
+void MV_SetXMPInterpolation(void);
 
 struct MV_MusicRoutineBuffer
 {
